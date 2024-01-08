@@ -17,8 +17,61 @@
 #include "hittable.h"
 #include "material.h"
 
+#include <functional>
+#include <future>
 #include <iostream>
+#include <queue>
+#include <thread>
+#include <vector>
 
+template <typename T>
+class BlockingQueue {
+  private:
+    std::mutex _mtx;
+    std::condition_variable _cond;
+    int _max_size;
+    std::queue<T> _queue;
+
+  public:
+    BlockingQueue(int max_size) : _max_size(max_size) {
+    }
+
+    void push(T t) {
+        std::unique_lock<std::mutex> lock(_mtx);
+        _cond.wait(lock, [this]() { return _queue.size() < _max_size; });
+        _queue.push(t);
+        lock.unlock();
+        _cond.notify_one();
+    }
+
+    T front() {
+        std::unique_lock<std::mutex> lock(_mtx);
+        _cond.wait(lock, [this]() { return !_queue.empty(); });
+        return _queue.front();
+    }
+
+    void pop() {
+        std::unique_lock<std::mutex> lock(_mtx);
+        _cond.wait(lock, [this]() { return !_queue.empty(); });
+        _queue.pop();
+        lock.unlock();
+        _cond.notify_one();
+    }
+
+    int size() {
+        std::lock_guard<std::mutex> lock(_mtx);
+        return _queue.size();
+    }
+};
+
+void producer_func(BlockingQueue<std::shared_future<std::vector<color>>> &futures, int image_height, int image_width, std::function<std::vector<color>(int, int)> lambda_func) {
+    for (int j = 0; j < image_height; ++j) {
+        // A new thread is spawned and pushed into BlockingQueue.
+        // If BlockingQueue is full, this thread will unlock the lock and wait until an element is pop out.
+        std::shared_future<std::vector<color>> f = std::async(std::launch::async, lambda_func, j, image_width);
+        futures.push(f);
+    }
+}
 
 class camera {
   public:
@@ -41,17 +94,48 @@ class camera {
 
         std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
 
+        const int CONCURRENCY = 4; // `std::thread::hardware_concurrency();` returns 16 on my laptop.
+        std::clog << "\rCONCURRENCY: " << CONCURRENCY << std::endl;
+        BlockingQueue<std::shared_future<std::vector<color>>> futures(CONCURRENCY); // CONCURRENCY = BlockingQueue's size
+
+        // The lambda function on which every spawned thread is going to run. Every
+        // thread process the whole given j-th row.
+        auto lambda_func = [this, &world](int j, int width) {
+            std::vector<color> vec_pixel_color(width, color(0, 0, 0));
+            for (int i = 0; i < width; ++i) {
+                color pixel_color(0,0,0);
+                for (int sample = 0; sample < this->samples_per_pixel; ++sample) {
+                    const ray r = get_ray(i, j);
+                    pixel_color += ray_color(r, this->max_depth, world);
+                }
+                vec_pixel_color[i] = pixel_color;
+            }
+            return vec_pixel_color;
+        };
+        std::thread producer_thread(producer_func, std::ref(futures), image_height, image_width, lambda_func);
+
         for (int j = 0; j < image_height; ++j) {
             std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
-            for (int i = 0; i < image_width; ++i) {
-                color pixel_color(0,0,0);
-                for (int sample = 0; sample < samples_per_pixel; ++sample) {
-                    ray r = get_ray(i, j);
-                    pixel_color += ray_color(r, max_depth, world);
-                }
-                write_color(std::cout, pixel_color, samples_per_pixel);
+
+            // Multi thread
+            std::shared_future<std::vector<color>> f = futures.front();
+            std::vector<color> vec_pixel_color = f.get();
+            futures.pop();
+            for (int i = 0; i < vec_pixel_color.size(); ++i) {
+                write_color(std::cout, vec_pixel_color[i], samples_per_pixel);
             }
+
+            // Single thread
+            // for (int i = 0; i < image_width; ++i) {
+            //     color pixel_color(0,0,0);
+            //     for (int sample = 0; sample < samples_per_pixel; ++sample) {
+            //         ray r = get_ray(i, j);
+            //         pixel_color += ray_color(r, max_depth, world);
+            //     }
+            //     write_color(std::cout, pixel_color, samples_per_pixel);
+            // }
         }
+        producer_thread.join();
 
         std::clog << "\rDone.                 \n";
     }

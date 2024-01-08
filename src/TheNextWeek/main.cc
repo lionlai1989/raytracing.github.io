@@ -21,6 +21,7 @@
 #include "sphere.h"
 #include "texture.h"
 
+#include <chrono>
 
 void random_spheres() {
     hittable_list world;
@@ -344,7 +345,7 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
     world.add(make_shared<bvh_node>(boxes1));
 
     auto light = make_shared<diffuse_light>(color(7, 7, 7));
-    world.add(make_shared<quad>(point3(123,554,147), vec3(300,0,0), vec3(0,0,265), light));
+    world.add(make_shared<quad>(point3(53,554,147), vec3(500,0,0), vec3(0,0,400), light));
 
     auto center1 = point3(400, 400, 200);
     auto center2 = center1 + vec3(30,0,0);
@@ -353,19 +354,25 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
 
     world.add(make_shared<sphere>(point3(260, 150, 45), 50, make_shared<dielectric>(1.5)));
     world.add(make_shared<sphere>(
-        point3(0, 150, 145), 50, make_shared<metal>(color(0.8, 0.8, 0.9), 1.0)
+        point3(0, 150, 200), 50, make_shared<metal>(color(0.96, 0.54, 0.91), 1.0)
     ));
 
     auto boundary = make_shared<sphere>(point3(360,150,145), 70, make_shared<dielectric>(1.5));
-    world.add(boundary);
-    world.add(make_shared<constant_medium>(boundary, 0.2, color(0.2, 0.4, 0.9)));
+    // world.add(boundary);
+    // world.add(make_shared<constant_medium>(boundary, 0.2, color(0.62, 0.91, 0.98)));
+    world.add(make_shared<sphere>(point3(500,125,105), 50, make_shared<metal>(color(0.62, 0.91, 0.98), 0.1)));
+
     boundary = make_shared<sphere>(point3(0,0,0), 5000, make_shared<dielectric>(1.5));
     world.add(make_shared<constant_medium>(boundary, .0001, color(1,1,1)));
 
     auto emat = make_shared<lambertian>(make_shared<image_texture>("earthmap.jpg"));
-    world.add(make_shared<sphere>(point3(400,200,400), 100, emat));
+    world.add(make_shared<sphere>(point3(450,200,350), 100, emat));
+
+    auto galaxy = make_shared<lambertian>(make_shared<image_texture>("PinwheelGalaxy.jpg"));
+    world.add(make_shared<sphere>(point3(180,280,500), 180, galaxy));
+
     auto pertext = make_shared<noise_texture>(0.1);
-    world.add(make_shared<sphere>(point3(220,280,300), 80, make_shared<lambertian>(pertext)));
+    world.add(make_shared<sphere>(point3(0,200,0), 50, make_shared<lambertian>(pertext)));
 
     hittable_list boxes2;
     auto white = make_shared<lambertian>(color(.73, .73, .73));
@@ -377,7 +384,7 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
     world.add(make_shared<translate>(
         make_shared<rotate_y>(
             make_shared<bvh_node>(boxes2), 15),
-            vec3(-100,270,395)
+            vec3(-400,270,600)
         )
     );
 
@@ -389,7 +396,7 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
     cam.max_depth         = max_depth;
     cam.background        = color(0,0,0);
 
-    cam.vfov     = 40;
+    cam.vfov     = 50;
     cam.lookfrom = point3(478, 278, -600);
     cam.lookat   = point3(278, 278, 0);
     cam.vup      = vec3(0,1,0);
@@ -401,6 +408,8 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
 
 
 int main() {
+    auto start = std::chrono::steady_clock::now();
+
     switch (0) {
         case 1:  random_spheres();            break;
         case 2:  two_spheres();               break;
@@ -411,6 +420,10 @@ int main() {
         case 7:  cornell_box();               break;
         case 8:  cornell_smoke();             break;
         case 9:  final_scene(800, 10000, 40); break;
-        default: final_scene(400,   250,  4); break;
+        default: final_scene(1024,  256,  4); break;
     }
+
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    std::clog << "Duration: " << duration << "ms";
 }

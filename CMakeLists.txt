@@ -121,3 +121,5 @@ add_executable(pi                src/TheRestOfYourLife/pi.cc                )
 add_executable(estimate_halfway  src/TheRestOfYourLife/estimate_halfway.cc  )
 add_executable(sphere_importance src/TheRestOfYourLife/sphere_importance.cc )
 add_executable(sphere_plot       src/TheRestOfYourLife/sphere_plot.cc       )
+
+target_link_libraries(theNextWeek pthread)
