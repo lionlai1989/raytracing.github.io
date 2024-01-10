@@ -423,6 +423,8 @@ int main() {
         default: final_scene(1024,  256,  4); break;
     }
 
+    // NOTE: `start` and `end` may be optimized by compiler and executed sequentially
+    // one after one without `switch` statement in between.
     auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     std::clog << "Duration: " << duration << "ms";
